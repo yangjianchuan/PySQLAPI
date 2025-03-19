@@ -88,6 +88,15 @@ def execute_sql(sql: str):
         cleaned_sql = sql.strip()
         # Remove backslashes that are followed by whitespace or newline
         cleaned_sql = cleaned_sql.replace('\\\n', '\n').replace('\\ ', ' ')
+        # Convert \* to *
+        cleaned_sql = cleaned_sql.replace('\\*', '*')
+        # Remove backslashes before underscores in identifiers
+        cleaned_sql = cleaned_sql.replace('\\_', '_')
+        # Remove backslashes before backticks
+        cleaned_sql = cleaned_sql.replace('\\`', '`')
+        # Remove backslashes before quotes
+        cleaned_sql = cleaned_sql.replace('\\"', '"')
+        cleaned_sql = cleaned_sql.replace("\\'", "'")
         
         # Fix double percentage signs in date format strings
         cleaned_sql = re.sub(r"(DATE_FORMAT\([^,]+,\s*)'%%([^']*)'", r"\1'%\2'", cleaned_sql)
