@@ -57,18 +57,35 @@ def get_db_connection():
 
 def extract_sql_from_markdown(text: str) -> str:
     """Extract SQL query from markdown text"""
+    # Clean HTML placeholders and escape characters
+    clean_text = text
+    
+    # Handle escaped characters
+    escape_chars = {
+        '\\n': '\n',
+        '\\"': '"',
+        "\\'": "'",
+        '\\`': '`',
+        '\\_': '_',
+        '\\*': '*',
+        '\\\\': '\\'
+    }
+    
+    for escape, char in escape_chars.items():
+        clean_text = clean_text.replace(escape, char)
+    
     # Try to find SQL in code blocks with SQL language specification
-    sql_match = re.search(r'```sql\s*(.*?)\s*```', text, re.DOTALL | re.IGNORECASE)
+    sql_match = re.search(r'```sql\s*(.*?)\s*```', clean_text, re.DOTALL | re.IGNORECASE)
     if sql_match:
         return sql_match.group(1).strip()
     
     # Try to find SQL in generic code blocks
-    code_match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
+    code_match = re.search(r'```\s*(.*?)\s*```', clean_text, re.DOTALL)
     if code_match:
         return code_match.group(1).strip()
     
     # If no code blocks found, return the text as is (assuming it's a direct SQL query)
-    return text.strip()
+    return clean_text.strip()
 
 def execute_sql(sql: str):
     """Execute SQL query and return results"""
@@ -86,33 +103,30 @@ def execute_sql(sql: str):
 
         # Clean up SQL query by removing newlines, backslashes and normalizing spaces
         cleaned_sql = sql.strip()
-        # Remove backslashes that are followed by whitespace or newline
+        
+        # First handle escaped newlines and spaces
         cleaned_sql = cleaned_sql.replace('\\\n', '\n').replace('\\ ', ' ')
-        # Convert \* to *
+        
+        # Handle escaped characters
         cleaned_sql = cleaned_sql.replace('\\*', '*')
-        # Remove backslashes before underscores in identifiers
         cleaned_sql = cleaned_sql.replace('\\_', '_')
-        # Remove backslashes before backticks
         cleaned_sql = cleaned_sql.replace('\\`', '`')
-        # Remove backslashes before quotes
+        
+        # Handle escaped quotes - convert to regular quotes
+        cleaned_sql = re.sub(r'\\"([^"]*)\\"', r'"\1"', cleaned_sql)  # Handle \"...\"
+        cleaned_sql = re.sub(r"\\'([^']*)\\'", r"'\1'", cleaned_sql)  # Handle \'...\'
         cleaned_sql = cleaned_sql.replace('\\"', '"')
         cleaned_sql = cleaned_sql.replace("\\'", "'")
         
         # Fix double percentage signs in date format strings
         cleaned_sql = re.sub(r"(DATE_FORMAT\([^,]+,\s*)'%%([^']*)'", r"\1'%\2'", cleaned_sql)
         
-        # Handle DATE_FORMAT with specific format string cleaning
+        # Handle DATE_FORMAT with specific format string cleaning - preserve original format
         def clean_date_format(match):
             column = match.group(1).strip()
             format_string = match.group(2)
-            # Clean specific date format patterns - handle any number of spaces between components
-            format_string = re.sub(r'%Y\s*-\s*%m', '%Y-%m', format_string)
-            format_string = re.sub(r'%y\s*-\s*%m', '%y-%m', format_string)
-            format_string = re.sub(r'%Y\s*-\s*%M', '%Y-%M', format_string)
-            format_string = re.sub(r'%y\s*-\s*%M', '%y-%M', format_string)
-            # Remove any remaining spaces between format components
-            format_string = re.sub(r'%([YyMmDd])\s*-\s*%([YyMmDd])', r'%\1-%\2', format_string)
-            format_string = re.sub(r'%([YyMmDd])\s+%([YyMmDd])', r'%\1%\2', format_string)
+            # Keep the original format string, just clean up any extra spaces around it
+            format_string = format_string.strip()
             return f"DATE_FORMAT({column},'{format_string}')"
             
         cleaned_sql = re.sub(r"DATE_FORMAT\s*\(\s*([^,]+)\s*,\s*'([^']+)'\s*\)", 
