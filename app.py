@@ -179,7 +179,7 @@ def execute_sql(sql: str):
         cleaned_sql = re.sub(pattern, r' \1 ', cleaned_sql, flags=re.IGNORECASE)
         
         # Add spaces around operators
-        operators = [r'=', r'<', r'>', r'<=', r'>=', r'<>', r'\+', r'-', r'\*', r'/']
+        operators = [r'=', r'<', r'>', r'<=', r'>=', r'<>', r'\+', r'\*', r'/']
         for op in operators:
             cleaned_sql = re.sub(fr'(?<!\s){op}(?!\s)', f' {op} ', cleaned_sql)
         

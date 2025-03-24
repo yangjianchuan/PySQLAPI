@@ -14,6 +14,8 @@ A FastAPI-based HTTP API for executing SQL queries with a web interface for test
 
 ## Setup
 
+### Method 1: Local Setup
+
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
@@ -37,6 +39,43 @@ MYSQL_CONNECTION_TIMEOUT=10
 ```bash
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
+
+### Method 2: Docker Setup
+
+1. Configure environment variables:
+Create a `.env` file with the same variables as shown above.
+
+2. Build and run with Docker:
+```bash
+# Build the Docker image
+docker build -t sql-query-api .
+
+# Run the container
+docker run -d \
+  --name sql-query-api \
+  -p 8000:8000 \
+  --env-file .env \
+  sql-query-api
+```
+
+### Method 3: Docker Compose Setup (Recommended)
+
+1. Configure environment variables:
+Create a `.env` file with the same variables as shown above.
+
+2. Run with Docker Compose:
+```bash
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+The application will be available at `http://localhost:8000`.
 
 ## Usage
 
