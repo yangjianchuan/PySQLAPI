@@ -72,7 +72,7 @@ def extract_sql_from_markdown(text: str) -> str:
     }
     
     for escape, char in escape_chars.items():
-        clean_text = clean_text.replace(escape, char)
+        clean_text = clean_text.replace(escape, char) 
     
     # Try to find SQL in code blocks with SQL language specification
     sql_match = re.search(r'```sql\s*(.*?)\s*```', clean_text, re.DOTALL | re.IGNORECASE)
@@ -101,22 +101,25 @@ def execute_sql(sql: str):
             def group(self, index):
                 return self._groups[index] if index < len(self._groups) else None
 
-        # Clean up SQL query by removing newlines, backslashes and normalizing spaces
+        # Clean up SQL query by removing newlines and normalizing spaces
         cleaned_sql = sql.strip()
         
         # First handle escaped newlines and spaces
-        cleaned_sql = cleaned_sql.replace('\\\n', '\n').replace('\\ ', ' ')
+        cleaned_sql = cleaned_sql.replace('\\n', '\n').replace('\\ ', ' ')
         
-        # Handle escaped characters
-        cleaned_sql = cleaned_sql.replace('\\*', '*')
-        cleaned_sql = cleaned_sql.replace('\\_', '_')
-        cleaned_sql = cleaned_sql.replace('\\`', '`')
+        # Handle escaped characters more thoroughly
+        escape_map = {
+            r'\\\"': '"',  # Handle double escaped quotes
+            r'\"': '"',    # Handle escaped quotes
+            r'\*': '*',    # Handle escaped asterisk
+            r'\_': '_',    # Handle escaped underscore
+            r'\`': '`',    # Handle escaped backtick
+            r"\'": "'",    # Handle escaped single quote
+            r'\\': '\\'    # Handle escaped backslash
+        }
         
-        # Handle escaped quotes - convert to regular quotes
-        cleaned_sql = re.sub(r'\\"([^"]*)\\"', r'"\1"', cleaned_sql)  # Handle \"...\"
-        cleaned_sql = re.sub(r"\\'([^']*)\\'", r"'\1'", cleaned_sql)  # Handle \'...\'
-        cleaned_sql = cleaned_sql.replace('\\"', '"')
-        cleaned_sql = cleaned_sql.replace("\\'", "'")
+        for escaped, unescaped in escape_map.items():
+            cleaned_sql = cleaned_sql.replace(escaped, unescaped)
         
         # Fix double percentage signs in date format strings
         cleaned_sql = re.sub(r"(DATE_FORMAT\([^,]+,\s*)'%%([^']*)'", r"\1'%\2'", cleaned_sql)
@@ -179,9 +182,17 @@ def execute_sql(sql: str):
         cleaned_sql = re.sub(pattern, r' \1 ', cleaned_sql, flags=re.IGNORECASE)
         
         # Add spaces around operators
-        operators = [r'=', r'<', r'>', r'<=', r'>=', r'<>', r'\+', r'\*', r'/']
+        operators = ['=', '<', '>', '<=', '>=', '<>', '+', '*', '/']
         for op in operators:
-            cleaned_sql = re.sub(fr'(?<!\s){op}(?!\s)', f' {op} ', cleaned_sql)
+            if op == '*':
+                # Handle asterisk separately to avoid regex issues
+                cleaned_sql = re.sub(r'(?<!\s)\*(?!\s)', ' * ', cleaned_sql)
+                # Don't add spaces to count(*) function
+                cleaned_sql = re.sub(r'count\s+\(\s*\*\s*\)', 'count(*)', cleaned_sql, flags=re.IGNORECASE)
+            else:
+                # Escape special regex characters
+                escaped_op = re.escape(op)
+                cleaned_sql = re.sub(fr'(?<!\s){escaped_op}(?!\s)', f' {op} ', cleaned_sql)
         
         # Fix multiple spaces
         cleaned_sql = re.sub(r'\s+', ' ', cleaned_sql)
@@ -301,21 +312,32 @@ def convert_to_csv(data):
 
 @app.post("/query")
 async def query_endpoint(request: Request, query: QueryRequest):
+    print(f"\n[{datetime.now()}] Received new query request")
+    
     # Verify API key from header
     api_key = request.headers.get('X-API-Key')
     if not api_key or api_key != os.getenv('API_KEY'):
+        print("[ERROR] Invalid API key")
         raise HTTPException(status_code=401, detail="Invalid API key")
     
     # Extract SQL from markdown
     sql = extract_sql_from_markdown(query.markdown_text)
+    print(f"[INFO] Original markdown text:\n{query.markdown_text}")
+    
+    print(f"[INFO] Extracted and cleaned SQL query:\n{sql}")
+    
     if not sql:
+        print("[ERROR] No SQL query found in input")
         raise HTTPException(status_code=400, detail="No SQL query found in the input")
     
     try:
         # Execute SQL and get results
+        print("[INFO] Executing SQL query...")
         results = execute_sql(sql)
+        print(f"[INFO] Query executed successfully. Retrieved {len(results)} rows")
         
         # Format results based on response_format
+        print(f"[INFO] Formatting results as {query.response_format}")
         formatted_data = results
         if query.response_format == "markdown":
             formatted_data = convert_to_markdown_table(results)
@@ -323,18 +345,21 @@ async def query_endpoint(request: Request, query: QueryRequest):
             formatted_data = convert_to_csv(results)
         
         # Return formatted response
+        print("[INFO] Request completed successfully")
         return {
             "code": 200,
             "message": "success",
             "data": formatted_data
         }
     except HTTPException as e:
+        print(f"[ERROR] HTTP Exception occurred: {e.detail}")
         return {
             "code": e.status_code,
             "message": "error",
             "data": e.detail
         }
     except Exception as e:
+        print(f"[ERROR] Unexpected error occurred: {str(e)}")
         return {
             "code": 500,
             "message": "error",
